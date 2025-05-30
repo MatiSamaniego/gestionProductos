@@ -1,11 +1,13 @@
-package com.gestion.de.inventario.controller;
+package com.gestion.de.inventario.controller; // Reemplaza con tu package si es diferente
 
 import com.gestion.de.inventario.model.Producto;
-import org.springframework.http.HttpStatus;
 import com.gestion.de.inventario.service.ProductoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.*; // Importación general para anotaciones de mapping
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.List;
 
 @RestController
@@ -17,92 +19,76 @@ public class ProductoController {
 
     @GetMapping
     public ResponseEntity<List<Producto>> listarProductos() {
-        List<Producto> productos = productoService.obtenerTodos();
-        return ResponseEntity.ok(productos);
+        return ResponseEntity.ok(productoService.listarProductos());
     }
 
     @GetMapping("/id/{id}")
-    public ResponseEntity<?> obtenerPorId(@PathVariable Long id) {
-        Producto producto = productoService.obtenerPorId(id);
-        if (producto == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Producto no encontrado con ID: " + id);
-        }
-        return ResponseEntity.ok(producto);
+    public ResponseEntity<Producto> obtenerProductoPorId(@PathVariable Long id) {
+        return productoService.obtenerProductoPorId(id)
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado con ID: " + id));
     }
 
     @GetMapping("/marca/{marca}")
-    public ResponseEntity<List<Producto>> buscarPorMarca(@PathVariable String marca) {
-        List<Producto> productos = productoService.buscarPorMarcaLike(marca);
-        if (productos.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
+    public ResponseEntity<List<Producto>> buscarProductosPorMarca(@PathVariable String marca) {
+        List<Producto> productos = productoService.buscarProductosPorMarca(marca);
         return ResponseEntity.ok(productos);
     }
 
     @GetMapping("/modelo/{modelo}")
-    public ResponseEntity<List<Producto>> buscarPorModelo(@PathVariable String modelo) {
-        List<Producto> productos = productoService.buscarPorModeloLike(modelo);
-        if (productos.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
+    public ResponseEntity<List<Producto>> buscarProductosPorModelo(@PathVariable String modelo) {
+        List<Producto> productos = productoService.buscarProductosPorModelo(modelo);
         return ResponseEntity.ok(productos);
     }
 
-    @GetMapping("/tipo/{tipoProducto}")
-    public ResponseEntity<List<Producto>> buscarPorTipoProducto(@PathVariable String tipoProducto) {
-        List<Producto> productos = productoService.buscarPorTipoProductoLike(tipoProducto);
-        if (productos.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
+    @GetMapping("/tipo/{tipo}")
+    public ResponseEntity<List<Producto>> buscarProductosPorTipo(@PathVariable String tipo) {
+        List<Producto> productos = productoService.buscarProductosPorTipo(tipo);
         return ResponseEntity.ok(productos);
     }
 
     @PostMapping
-    public ResponseEntity<?> crearProducto(@RequestBody Producto producto) {
-        if (producto.getModelo() == null || producto.getModelo().trim().isEmpty()) {
-            return ResponseEntity.badRequest().body("El modelo no puede estar vacío.");
-        }
-        if (producto.getStock() <= 0) {
-            return ResponseEntity.badRequest().body("El stock debe ser mayor a cero.");
-        }
-        if (producto.getPrecio() <= 0) {
-            return ResponseEntity.badRequest().body("El precio debe ser mayor a cero.");
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(productoService.guardarProducto(producto));
+    public ResponseEntity<Producto> crearProducto(@RequestBody Producto producto) {
+        Producto nuevoProducto = productoService.guardarProducto(producto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(nuevoProducto);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> actualizarProducto(@PathVariable Long id, @RequestBody Producto productoActualizado) {
-        if (productoActualizado.getModelo() == null || productoActualizado.getModelo().trim().isEmpty()) {
-            return ResponseEntity.badRequest().body("El modelo no puede estar vacío.");
-        }
-        if (productoActualizado.getStock() <= 0) {
-            return ResponseEntity.badRequest().body("El stock debe ser mayor a cero.");
-        }
-        if (productoActualizado.getPrecio() <= 0) {
-            return ResponseEntity.badRequest().body("El precio debe ser mayor a cero.");
-        }
-
-        Producto producto = productoService.obtenerPorId(id);
-        if (producto == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Producto no encontrado con ID: " + id);
-        }
-
-        producto.setModelo(productoActualizado.getModelo());
-        producto.setStock(productoActualizado.getStock());
-        producto.setMarca(productoActualizado.getMarca());
-        producto.setPrecio(productoActualizado.getPrecio());
-        producto.setTipoProducto(productoActualizado.getTipoProducto());
-        return ResponseEntity.ok(productoService.guardarProducto(producto));
+    public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id, @RequestBody Producto productoDetalles) {
+        Producto productoActualizado = productoService.actualizarProducto(id, productoDetalles);
+        return ResponseEntity.ok(productoActualizado);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> eliminarProducto(@PathVariable Long id) {
+    public ResponseEntity<Void> eliminarProducto(@PathVariable Long id) {
+        productoService.eliminarProducto(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/descontarstock")
+    public ResponseEntity<Producto> descontarStock(@PathVariable Long id, @RequestParam int cantidad) {
         try {
-            productoService.eliminarProducto(id);
-            return ResponseEntity.noContent().build();
+            Producto productoActualizado = productoService.descontarStock(id, cantidad);
+            return ResponseEntity.ok(productoActualizado);
+        } catch (ResponseStatusException e) {
+            throw e;
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al eliminar el producto");
+            System.err.println("Error inesperado al descontar stock para el producto " + id + ": " + e.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al descontar stock: " + e.getMessage(), e);
+        }
+    }
+
+    // Endpoint para aumentar stock
+    @PatchMapping("/{id}/aumentarstock")
+    public ResponseEntity<Producto> aumentarStock(@PathVariable Long id, @RequestParam int cantidad) {
+        try {
+            Producto productoActualizado = productoService.aumentarStock(id, cantidad);
+            return ResponseEntity.ok(productoActualizado);
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            System.err.println("Error inesperado al aumentar stock para el producto " + id + ": " + e.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al aumentar stock.", e);
         }
     }
 }
